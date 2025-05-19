@@ -1,3 +1,4 @@
 data/
 outputs/
 vector_store/
+__pycache__/
