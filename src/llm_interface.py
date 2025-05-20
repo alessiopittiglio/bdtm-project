@@ -3,7 +3,7 @@ from llama_cpp import Llama
 
 logger = logging.getLogger(__name__)
 
-def load_llm(model_path, gguf_config=None):
+def load_llm(model_path, model_config=None):
     """
     Loads a GGUF LLM model
 
@@ -15,12 +15,12 @@ def load_llm(model_path, gguf_config=None):
         Llama: Loaded Llama object or None if an error occurs.
     """
     llm = None
-    gguf_params = gguf_config or {}
+    model_params = model_config or {}
 
     try:
         llm = Llama(
             model_path=model_path,
-            **gguf_params,
+            **model_params,
         )
     except Exception as e:
         logger.error(f"Error loading GGUF model {model_path}: {e}")
@@ -28,7 +28,7 @@ def load_llm(model_path, gguf_config=None):
 
     return llm
 
-def generate_response(llm, messages, gen_params=None):
+def generate_response(llm, messages, gen_config=None):
     """
     Generates a response from the loaded GGUF LLM using create_chat_completion.
 
@@ -42,13 +42,13 @@ def generate_response(llm, messages, gen_params=None):
     Returns:
         str: The generated response text or None if an error occurs.
     """
-    params = gen_params or {}
+    gen_params = gen_config or {}
     response_text = None
 
     try:
         response = llm.create_chat_completion(
             messages=messages,
-            **params,
+            **gen_params,
         )
         response_text = response['choices'][0]['message']['content'].strip()
     except Exception as e:
