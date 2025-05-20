@@ -23,10 +23,8 @@ def get_embedding_model(model_name: str, device: str = None) -> SentenceTransfor
 
     cache_key = (model_name, device)
     if cache_key not in _embedding_model_cache:
-        logger.info(f"Loading the embedding model {model_name} on {device}...")
         model = SentenceTransformer(model_name, device=device)
         _embedding_model_cache[cache_key] = model
-        logger.info("Model loaded successfully.")
     return _embedding_model_cache[cache_key]
 
 def generate_embeddings(
