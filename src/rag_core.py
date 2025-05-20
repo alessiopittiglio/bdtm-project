@@ -1,5 +1,8 @@
+import logging
 import chromadb
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+
+logger = logging.getLogger(__name__)
 
 def initialize_chroma_client(path=None):
     """
@@ -12,10 +15,9 @@ def initialize_chroma_client(path=None):
     """
     try:
         client = chromadb.PersistentClient(path=path)
-        print(f"ChromaDB client initialized from: {path}")
         return client
     except Exception as e:
-        print(f"Error initializing ChromaDB client in {path}: {e}")
+        logger.error(f"Error initializing ChromaDB client in {path}: {e}")
         return None
 
 def get_chroma_collection(
@@ -39,7 +41,7 @@ def get_chroma_collection(
         chromadb.Collection: ChromaDB collection object or None if error.
     """
     if not client:
-        print("Error: ChromaDB client not provided to get_or_create_chroma_collection.")
+        logger.error("Error: ChromaDB client not provided to get_or_create_chroma_collection.")
         return None
     try:
         ef = None
@@ -51,9 +53,9 @@ def get_chroma_collection(
                 ef = SentenceTransformerEmbeddingFunction(
                     model_name=embedding_model_name
                 )
-                print(f"Embedding function for Chroma '{embedding_model_name}' set.")
+                logger.info(f"Embedding function for Chroma '{embedding_model_name}' set.")
             except Exception as e_ef:
-                print(
+                logger.warning(
                     f"Warning: Unable to create SentenceTransformerEmbeddingFunction "
                     f"for {embedding_model_name}: {e_ef}. The collection will be "
                     "created without a specific embedding function (pre-computed "
@@ -65,13 +67,14 @@ def get_chroma_collection(
             embedding_function=ef,
             metadata=metadata_config # es. {"hnsw:space": "cosine"}
         )
-        print(
-            f"Collection '{collection_name}' obtained/created. ", 
+
+        logger.info(
+            f"Collection '{collection_name}' obtained/created. "
             f"Items: {collection.count()}"
         )
         return collection
     except Exception as e:
-        print(
+        logger.error(
             f"Error during get/create of ChromaDB collection '{collection_name}': {e}"
         )
         return None
@@ -100,16 +103,16 @@ def add_to_collection(
         bool: True if successful, False otherwise.
     """
     if not collection:
-        print("Error: ChromaDB collection not provided to add_to_collection.")
+        logger.error("Error: ChromaDB collection not provided to add_to_collection.")
         return False
     if not len(texts) == len(embeddings) == len(metadatas) == len(ids):
-        print(
+        logger.error(
             "Error: The lists of texts, embeddings, metadatas and IDs must have the ", 
             "same length."
         )
         return False
     if not texts:
-        print("No data to add to the collection.")
+        logger.info("No data to add to the collection.")
         return True
     try:
         for i in range(0, len(texts), batch_size):
@@ -125,13 +128,15 @@ def add_to_collection(
                 metadatas=batch_metadatas,
                 ids=batch_ids
             )
-        print(
-            f"Added {len(ids)} items to collection '{collection.name}'. ",
+        logger.info(
+            f"Added {len(ids)} items to collection '{collection.name}'. "
             f"Total now: {collection.count()}"
         )
         return True
     except Exception as e:
-        print(f"Error adding data to ChromaDB collection '{collection.name}': {e}")
+        logger.error(
+            f"Error adding data to ChromaDB collection '{collection.name}': {e}"
+        )
         return False
 
 
@@ -169,10 +174,10 @@ def retrieve_from_collection(
             If you pass a single embedding, you'll access results['documents'][0], etc.
     """
     if not collection:
-        print("Error: ChromaDB collection not provided to retrieve_from_collection.")
+        logger.error("Error: ChromaDB collection not provided to retrieve_from_collection.")
         return None
     if not query_embeddings:
-        print("Error: no query_embedding provided.")
+        logger.error("Error: no query_embedding provided.")
         return None
 
     if (
@@ -200,5 +205,5 @@ def retrieve_from_collection(
         )
         return results
     except Exception as e:
-        print(f"Error querying ChromaDB collection '{collection.name}': {e}")
+        logger.error(f"Error querying ChromaDB collection '{collection.name}': {e}")
         return None
