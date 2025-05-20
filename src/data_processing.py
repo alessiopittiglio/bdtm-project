@@ -107,6 +107,8 @@ def chunk_text(text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
     start_index = 0
     while start_index < len(text):
         end_index = start_index + chunk_size
-        chunks.append(text[start_index:end_index])
+        chunk = text[start_index:end_index].strip()
+        if chunk and len(chunk) > 50:
+            chunks.append(chunk)
         start_index += chunk_size - chunk_overlap
     return chunks
