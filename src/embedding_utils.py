@@ -1,5 +1,8 @@
+import logging
 import torch
 from sentence_transformers import SentenceTransformer
+
+logger = logging.getLogger(__name__)
 
 _embedding_model_cache = {}
 
@@ -20,10 +23,10 @@ def get_embedding_model(model_name: str, device: str = None) -> SentenceTransfor
 
     cache_key = (model_name, device)
     if cache_key not in _embedding_model_cache:
-        print(f"Loading the embedding model {model_name} on {device}...")
+        logger.info(f"Loading the embedding model {model_name} on {device}...")
         model = SentenceTransformer(model_name, device=device)
         _embedding_model_cache[cache_key] = model
-        print("Model loaded successfully.")
+        logger.info("Model loaded successfully.")
     return _embedding_model_cache[cache_key]
 
 def generate_embeddings(
@@ -52,7 +55,7 @@ def generate_embeddings(
     if not texts:
         return []
     
-    print(f"Generating embeddings for {len(texts)} texts...")
+    logger.info(f"Generating embeddings for {len(texts)} texts...")
     embeddings = embedding_model.encode(
         texts,
         batch_size=batch_size,
@@ -60,5 +63,5 @@ def generate_embeddings(
         convert_to_numpy=convert_to_numpy,
         normalize_embeddings=normalize_embeddings,
     )
-    print(f"Generated {len(embeddings)} embeddings.")
+    logger.info(f"Generated {len(embeddings)} embeddings.")
     return embeddings
