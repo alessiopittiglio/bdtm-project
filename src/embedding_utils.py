@@ -32,6 +32,7 @@ def generate_embeddings(
         batch_size: int = 32,
         show_progress: bool = True,
         convert_to_numpy: bool = True,
+        normalize_embeddings: bool = True,
     ):
     """
     Generate embeddings for a list of texts using a SentenceTransformer model.
@@ -43,6 +44,7 @@ def generate_embeddings(
         show_progress (bool, optional): Whether to show a progress bar.
         convert_to_numpy (bool, optional): Whether to convert embeddings to a NumPy 
             arrays.
+        normalize_embeddings (bool, optional): Whether to normalize the embeddings.
     
     Returns:
         list: A list or NumPy array of embeddings.
@@ -56,6 +58,7 @@ def generate_embeddings(
         batch_size=batch_size,
         show_progress_bar=show_progress,
         convert_to_numpy=convert_to_numpy,
+        normalize_embeddings=normalize_embeddings,
     )
     print(f"Generated {len(embeddings)} embeddings.")
     return embeddings
