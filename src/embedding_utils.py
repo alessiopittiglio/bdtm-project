@@ -31,7 +31,7 @@ def generate_embeddings(
         texts: list[str],
         embedding_model: SentenceTransformer,
         batch_size: int = 32,
-        show_progress: bool = True,
+        show_progress: bool = False,
         convert_to_numpy: bool = True,
         normalize_embeddings: bool = True,
     ):
