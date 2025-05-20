@@ -77,7 +77,7 @@ def load_transcripts_and_metadata(data_dir: str) -> list[dict]:
             
                 all_documents_data.append({
                     "text": text_content,
-                    "source_file_txt": str(txt_file_path),
+                    "source_file_txt": base_filename,
                     "course_name": course_name,
                     "metadata": metadata_content,
                 })
