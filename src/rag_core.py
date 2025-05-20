@@ -81,7 +81,8 @@ def add_to_collection(
         texts: list,
         embeddings: list,
         metadatas: list,
-        ids: list
+        ids: list,
+        batch_size: int = 1000
     ):
     """
     Adds documents, embeddings, metadata, and IDs to a ChromaDB collection.
@@ -93,6 +94,7 @@ def add_to_collection(
         embeddings (list): List of vectors (embeddings) for each text.
         metadatas (list): List of metadata dictionaries for each text.
         ids (list): List of unique IDs for each text.
+        batch_size (int): Batch size for adding data to the collection.
     
     Returns:
         bool: True if successful, False otherwise.
@@ -110,16 +112,19 @@ def add_to_collection(
         print("No data to add to the collection.")
         return True
     try:
-        # ChromeDB handle batching internally for the add function.
-        # For VERY large datasets, you might still want to split the data into smaller
-        # batches and call collection.add() multiple times, but for tens/hundreds of 
-        # thousands of chunks a single call should be fine.
-        collection.add(
-            embeddings=embeddings,
-            documents=texts,
-            metadatas=metadatas,
-            ids=ids
-        )
+        for i in range(0, len(texts), batch_size):
+            batch_texts = texts[i:i + batch_size]
+            batch_embeddings = embeddings[i:i + batch_size]
+            batch_metadatas = metadatas[i:i + batch_size]
+            batch_ids = ids[i:i + batch_size]
+
+            # Add the batch to the collection
+            collection.add(
+                documents=batch_texts,
+                embeddings=batch_embeddings,
+                metadatas=batch_metadatas,
+                ids=batch_ids
+            )
         print(
             f"Added {len(ids)} items to collection '{collection.name}'. ",
             f"Total now: {collection.count()}"
