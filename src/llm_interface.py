@@ -1,4 +1,7 @@
+import logging
 from llama_cpp import Llama
+
+logger = logging.getLogger(__name__)
 
 def load_llm(model_path, gguf_config=None):
     """
@@ -19,9 +22,8 @@ def load_llm(model_path, gguf_config=None):
             model_path=model_path,
             **gguf_params,
         )
-        print("GGUF model loaded.")
     except Exception as e:
-        print(f"Error loading GGUF model {model_path}: {e}")
+        logger.error(f"Error loading GGUF model {model_path}: {e}")
         return None
 
     return llm
@@ -50,7 +52,7 @@ def generate_response(llm, messages, gen_params=None):
         )
         response_text = response['choices'][0]['message']['content'].strip()
     except Exception as e:
-        print(f"Error generating response: {e}")
+        logger.error(f"Error generating response: {e}")
         return None
     
     return response_text
