@@ -1,6 +1,9 @@
+import logging
 import json
 from pathlib import Path
 from tqdm import tqdm
+
+logger = logging.getLogger(__name__)
 
 def load_transcripts(data_dir: str) -> list[dict]:
     """
@@ -58,10 +61,6 @@ def load_transcripts_and_metadata(data_dir: str) -> list[dict]:
             transcript_path = target_dir / "transcripts_txt"
             metadata_path = target_dir / "transcripts_metadata"
 
-            print(
-                f"Processing course: {course_name} ({target_dir.name})" 
-                if module_dirs else f"Processing course: {course_name}"
-            )
             for txt_file_path in tqdm(
                 transcript_path.glob("*.txt"),
                 desc=f"Lectures: {course_name}",
@@ -83,7 +82,7 @@ def load_transcripts_and_metadata(data_dir: str) -> list[dict]:
                     "metadata": metadata_content,
                 })
     
-    print(f"Loaded {len(all_documents_data)} transcripts.")
+    logger.info(f"Loaded {len(all_documents_data)} transcripts.")
     return all_documents_data
     
 
