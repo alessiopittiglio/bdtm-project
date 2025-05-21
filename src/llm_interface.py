@@ -15,11 +15,12 @@ def load_llm(model_path, model_config=None):
         Llama: Loaded Llama object or None if an error occurs.
     """
     llm = None
+    model_path_str = str(model_path)
     model_params = model_config or {}
 
     try:
         llm = Llama(
-            model_path=model_path,
+            model_path=model_path_str,
             **model_params,
         )
     except Exception as e:
