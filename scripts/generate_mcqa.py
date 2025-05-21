@@ -125,7 +125,7 @@ def main(test_mode=False, num_test_lectures=1):
 
         logger.info(
             f"Lecture {metadata['course_details']['lecture_num']} - "
-            f"{formatted_course_name} ({formatted_module_name}))"
+            f"{formatted_course_name} {formatted_module_name})"
         )
 
         chunks = chunk_text(
