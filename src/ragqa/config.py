@@ -52,6 +52,8 @@ LLM_GENERATION_CONFIG = {
 }
 
 # --------------------------------------------------------------------------------------
-# Placeholder for MCQA evaluation config
+# MCQA evaluation config
 # --------------------------------------------------------------------------------------
-
+RETRIEVAL_TOP_K = 5
+CONTEXT_QUESTION_PROMPT = PROMPTS_DIR / "context_qa_template.txt"
+ANSWER_FORMAT_PROMPT = PROMPTS_DIR / "mcqa_answer_format_template.txt"
