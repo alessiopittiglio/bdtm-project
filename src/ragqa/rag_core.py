@@ -13,8 +13,9 @@ def initialize_chroma_client(path=None):
     Returns:
         chromadb.PersistentClient: ChromaDB client object or None if error.
     """
+    path_str = str(path)
     try:
-        client = chromadb.PersistentClient(path=path)
+        client = chromadb.PersistentClient(path=path_str)
         return client
     except Exception as e:
         logger.error(f"Error initializing ChromaDB client in {path}: {e}")
