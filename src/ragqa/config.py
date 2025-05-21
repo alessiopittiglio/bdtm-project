@@ -9,6 +9,7 @@ DATA_DIR = BASE_DIR / "data"
 VECTOR_STORE_DIR = BASE_DIR / "vector_store"
 MODELS_DIR = BASE_DIR / "models"
 PROMPTS_DIR = BASE_DIR / "prompts"
+OUTPUT_DIR = BASE_DIR / "output"
 
 MCQA_GENERATED_JSON = DATA_DIR / "mcqa_generated.json"
 MCQA_CURATED_JSON = DATA_DIR / "mcqa_curated.json"
