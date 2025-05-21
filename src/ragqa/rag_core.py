@@ -177,7 +177,7 @@ def retrieve_from_collection(
     if not collection:
         logger.error("Error: ChromaDB collection not provided to retrieve_from_collection.")
         return None
-    if not query_embeddings:
+    if query_embeddings is None:
         logger.error("Error: no query_embedding provided.")
         return None
 
