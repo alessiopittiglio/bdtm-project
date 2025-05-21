@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 def format_prompt(text_chunk):
-    prompt_template = load_prompt(config.PROMPT_PATH)
+    prompt_template = load_prompt(config.PROMPT_TEMPLATE_PATH)
     if not prompt_template:
         pass # Handle the case where the prompt template is not loaded
     return prompt_template.format(context=text_chunk)
@@ -90,7 +90,7 @@ def main(test_mode=False, num_test_lectures=1):
 
     logger.info("Loading LLM for MCQ generation...")
     llm = load_llm(
-        model_path=config.MCQA_LLM_GGUF_PATH,
+        model_path=config.LLM_MODEL_PATH,
         model_config=config.LLM_MODEL_CONFIG,
     )
     if not llm:
@@ -134,7 +134,7 @@ def main(test_mode=False, num_test_lectures=1):
             config.CHUNK_OVERLAP
         )
         
-        num_to_sample = config.NUM_CHUNKS_TO_SAMPLE_PER_LESSON
+        num_to_sample = config.NUM_CHUNKS_TO_SAMPLE
 
         if len(chunks) > num_to_sample:
             step = len(chunks) // num_to_sample
@@ -204,8 +204,8 @@ def main(test_mode=False, num_test_lectures=1):
     logger.info(f"Generated {len(generated_mcqs)} potential MCQs.")
     
     if generated_mcqs:
-        logger.info(f"Saving generated dataset to: {config.MCQA_GENERATED_JSON_PATH}")
-        with open(config.MCQA_GENERATED_JSON_PATH, 'w', encoding='utf-8') as f:
+        logger.info(f"Saving generated dataset to: {config.MCQA_GENERATED_JSON}")
+        with open(config.MCQA_GENERATED_JSON, 'w', encoding='utf-8') as f:
             json.dump(generated_mcqs, f, ensure_ascii=False, indent=2)
 
     del llm
