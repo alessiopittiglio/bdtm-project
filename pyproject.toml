@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ragqa"
+version = "0.1.0"
+description = "Evaluate RAG models on MCQA using AI lecture transcripts"
+authors = [
+    { name = "Alessio Pittiglio", email = "alessiopittiglio@icloud.com" },
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
