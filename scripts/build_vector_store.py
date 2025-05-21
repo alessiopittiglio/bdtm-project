@@ -22,7 +22,7 @@ def main():
         device=device,
     )
 
-    client = initialize_chroma_client(config.VECTOR_STORE_PATH)
+    client = initialize_chroma_client(config.VECTOR_STORE_DIR)
 
     collection = get_chroma_collection(
         client=client,
@@ -30,7 +30,7 @@ def main():
         metadata_config={"hnsw:space": "cosine"},
     )
 
-    all_lessons_data = load_transcripts_and_metadata(config.DATA_PATH)
+    all_lessons_data = load_transcripts_and_metadata(config.DATA_DIR)
 
     all_chunks_texts = []
     all_metadatas = []
