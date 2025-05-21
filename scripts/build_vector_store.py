@@ -1,10 +1,10 @@
 import logging
 import torch
 
-from src import config
-from src.data_processing import load_transcripts_and_metadata, chunk_text
-from src.embedding_utils import get_embedding_model, generate_embeddings
-from src.rag_core import (
+from ragqa import config
+from ragqa.data_processing import load_transcripts_and_metadata, chunk_text
+from ragqa.embedding_utils import get_embedding_model, generate_embeddings
+from ragqa.rag_core import (
     initialize_chroma_client,
     get_chroma_collection,
     add_to_collection
