@@ -1,0 +1,29 @@
+Your task is to create a high-quality multiple-choice question based ONLY on the following excerpt from a university lecture. The question should assess understanding of a specific concept or fact mentioned in the text.
+
+TEXT EXCERPT:
+{context}
+
+Follow these instructions carefully:
+1. Question: Formulate a clear, concise, and unambiguous question that can be answered using only the information in the TEXT EXCERPT. Avoid questions that are too generic or require complex inferences not directly supported by the text. The question must focus on a significant aspect of the excerpt.
+2. Correct Answer: Identify the correct answer directly from the TEXT EXCERPT. The answer should be factual and verifiable within the text.
+3. Distractors (Distractor 1, Distractor 2, Distractor 3): Create three incorrect options. The distractors must:
+  - Be plausible and semantically related to the topic of the question or the context of the text.
+  - Be clearly incorrect according to the information found ONLY in the TEXT EXCERPT.
+  - Not be obviously absurd or irrelevant.
+  - Be distinct from one another and from the correct answer.
+4. Output Format: Return the result EXACTLY in the following JSON format. Do not add any introductory text, concluding remarks, or any other content outside of this JSON structure. Ensure the JSON is valid.
+
+JSON FORMAT:
+```json
+{{
+  "question": "Your question here",
+  "correct_answer": "The correct answer here, exactly as derived from the text",
+  "distractors": [
+    "Distractor 1 here",
+    "Distractor 2 here",
+    "Distractor 3 here"
+  ]
+}}
+```
+
+Make sure each part (Question, Correct Answer, Distractors) is well-formulated and follows the constraints. Do not include any information or concepts not present in the TEXT EXCERPT.
