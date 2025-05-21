@@ -1,0 +1,6 @@
+Based exclusively on the following provided context, answer the question. If the information is not present in the context, respond by saying you cannot answer based on the provided context. Be concise.
+
+Context:
+{context}
+
+Question: {question}
