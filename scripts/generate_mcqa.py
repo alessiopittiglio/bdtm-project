@@ -7,10 +7,10 @@ import random
 import re
 import torch
 
-from src import config
-from src.data_processing import load_transcripts_and_metadata, chunk_text
-from src.llm_interface import load_llm, generate_response
-from src.prompt_loader import load_prompt
+from ragqa import config
+from ragqa.data_processing import load_transcripts_and_metadata, chunk_text
+from ragqa.llm_interface import load_llm, generate_response
+from ragqa.prompt_loader import load_prompt
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
