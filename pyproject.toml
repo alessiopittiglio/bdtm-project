@@ -10,5 +10,5 @@ authors = [
     { name = "Alessio Pittiglio", email = "alessiopittiglio@icloud.com" },
 ]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.setuptools]
+packages = ["ragqa"]
