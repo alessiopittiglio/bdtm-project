@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def format_prompt(text_chunk):
-    prompt_template = load_prompt(config.PROMPT_TEMPLATE_PATH)
+    prompt_template = load_prompt(config.GENERATION_PROMPT_PATH)
     if not prompt_template:
         pass  # Handle the case where the prompt template is not loaded
     return prompt_template.format(context=text_chunk)
@@ -91,7 +91,7 @@ def main(test_mode=False, num_test_lectures=1):
 
     logger.info("Loading LLM for MCQ generation...")
     llm = load_llm(
-        model_path=config.LLM_MODEL_PATH,
+        model_path=config.GENERATION_MODEL_PATH,
         model_config=config.LLM_MODEL_CONFIG,
     )
     if not llm:
