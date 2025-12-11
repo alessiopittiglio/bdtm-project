@@ -33,22 +33,22 @@ GENERATION_MODEL_NAME = "DeepSeek-R1-Distill-Qwen-32B-Q4_K_M"
 GENERATION_MODEL_PATH = MODELS_DIR / "DeepSeek-R1-Distill-Qwen-32B-Q4_K_M.gguf"
 GENERATION_PROMPT_PATH = PROMPTS_DIR / "mcqa_generation_template.txt"
 
-NUM_CHUNKS_TO_SAMPLE = 3 # per lecture
+NUM_CHUNKS_TO_SAMPLE = 3  # per lecture
 
 LLM_MODEL_CONFIG = {
-    'n_gpu_layers': 61,
-    'temp': 0.6,
-    'top_p': 0.95,
-    'top_k': 20,
-    'min_p': 0,
-    'n_ctx': 16384,
-    'flash_attn': True,
-    'verbose': False
+    "n_gpu_layers": 61,
+    "temp": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "min_p": 0,
+    "n_ctx": 16384,
+    "flash_attn": True,
+    "verbose": False,
 }
 
 LLM_GENERATION_CONFIG = {
-    'max_tokens': None,
-    'temperature': 0.6,
+    "max_tokens": None,
+    "temperature": 0.6,
 }
 
 # --------------------------------------------------------------------------------------
