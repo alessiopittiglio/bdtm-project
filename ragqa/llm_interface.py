@@ -3,6 +3,7 @@ from llama_cpp import Llama
 
 logger = logging.getLogger(__name__)
 
+
 def load_llm(model_path, model_config=None):
     """
     Loads a GGUF LLM model
@@ -29,6 +30,7 @@ def load_llm(model_path, model_config=None):
 
     return llm
 
+
 def generate_response(llm, messages, gen_config=None):
     """
     Generates a response from the loaded GGUF LLM using create_chat_completion.
@@ -39,7 +41,7 @@ def generate_response(llm, messages, gen_config=None):
              [{"role": "user", "content": "Your prompt"}].
         gen_params (dict): Dictionary of generation parameters
             (e.g., max_tokens, temperature, top_p, stop).
-                           
+
     Returns:
         str: The generated response text or None if an error occurs.
     """
@@ -51,9 +53,9 @@ def generate_response(llm, messages, gen_config=None):
             messages=messages,
             **gen_params,
         )
-        response_text = response['choices'][0]['message']['content'].strip()
+        response_text = response["choices"][0]["message"]["content"].strip()
     except Exception as e:
         logger.error(f"Error generating response: {e}")
         return None
-    
+
     return response_text

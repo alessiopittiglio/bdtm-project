@@ -7,14 +7,15 @@ from ragqa.embedding_utils import get_embedding_model, generate_embeddings
 from ragqa.rag_core import (
     initialize_chroma_client,
     get_chroma_collection,
-    add_to_collection
+    add_to_collection,
 )
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+device = "cuda" if torch.cuda.is_available() else "cpu"
 logger.info(f"Using device: {device}")
+
 
 def main():
     embedding_model = get_embedding_model(
@@ -37,8 +38,8 @@ def main():
     all_ids = []
 
     for idx, doc in enumerate(all_lessons_data):
-        doc_text = doc['text']
-        doc_source = doc['source_file_txt']
+        doc_text = doc["text"]
+        doc_source = doc["source_file_txt"]
         chunks = chunk_text(doc_text, config.CHUNK_SIZE, config.CHUNK_OVERLAP)
 
         for i, chunk in enumerate(chunks):
@@ -76,18 +77,19 @@ def main():
 
         results = collection.query(
             query_embeddings=query_embedding,
-            n_results=3, 
+            n_results=3,
         )
 
         print(f"\n--- Example Query Results ---")
 
-        if results and results.get('documents'):
-            for i, doc in enumerate(results['documents'][0]):
+        if results and results.get("documents"):
+            for i, doc in enumerate(results["documents"][0]):
                 print(f"\nResult {i + 1}")
                 print(f"Source: {results['metadatas'][0][i]['source']}")
                 print(f"Chunk Text: {doc[:300]}...\n")  # Print first 300 characters
         else:
             print("No results found for the example query.")
+
 
 if __name__ == "__main__":
     main()
