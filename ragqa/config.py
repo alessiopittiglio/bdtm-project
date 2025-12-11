@@ -29,7 +29,6 @@ CHUNK_OVERLAP = 200
 # --------------------------------------------------------------------------------------
 # MCQA generation configuration
 # --------------------------------------------------------------------------------------
-GENERATION_MODEL_NAME = "DeepSeek-R1-Distill-Qwen-32B-Q4_K_M"
 GENERATION_MODEL_PATH = MODELS_DIR / "DeepSeek-R1-Distill-Qwen-32B-Q4_K_M.gguf"
 GENERATION_PROMPT_PATH = PROMPTS_DIR / "mcqa_generation_template.txt"
 
@@ -43,6 +42,7 @@ LLM_MODEL_CONFIG = {
     "min_p": 0,
     "n_ctx": 16384,
     "flash_attn": True,
+    "swa_full": False,
     "verbose": False,
 }
 
