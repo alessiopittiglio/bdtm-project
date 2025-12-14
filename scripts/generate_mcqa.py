@@ -5,64 +5,58 @@ import logging
 import os
 import random
 import re
+
 import torch
 
 from ragqa import config
-from ragqa.data_processing import load_transcripts_and_metadata, chunk_text
-from ragqa.llm_interface import load_llm, generate_response
+from ragqa.data_processing import chunk_text, load_transcripts_and_metadata
+from ragqa.llm_interface import generate_response, load_llm
 from ragqa.prompt_loader import load_prompt
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 
-def format_prompt(text_chunk):
+def build_prompt(text_chunk):
     prompt_template = load_prompt(config.GENERATION_PROMPT_PATH)
+
     if not prompt_template:
-        pass  # Handle the case where the prompt template is not loaded
+        raise RuntimeError("Failed to load generation prompt template.")
+
     return prompt_template.format(context=text_chunk)
 
 
-def parse_output(output, source_file):
+def _extract_json_from_output(output):
+    # Attempt 1: fenced ```json ... ```
+    match = re.search(r"```json\s*(\{.*?\})\s*```", output, re.DOTALL)
+    if match:
+        return match.group(1)
+
+    # Attempt 2: first '{' to last '}'
+    start, end = output.find("{"), output.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return output[start : end + 1]
+
+    return None
+
+
+def parse_llm_output(output, source_info):
     if not output:
         return None
 
-    output_str = output.strip()
-
-    # Attempt 1: Look for JSON delimited by ```json ... ```
-    json_block_match = re.search(r"```json\s*(\{.*?\})\s*```", output_str, re.DOTALL)
-    if json_block_match:
-        json_str = json_block_match.group(1)
-    else:
-        # Attempt 2: Look the first '{' and the last '}'
-        first_brace = output_str.find("{")
-        last_brace = output_str.rfind("}")
-
-        if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
-            json_str = output_str[first_brace : last_brace + 1]
-        else:
-            logger.error("Failed to find JSON in LLM output.")
-            return None
+    json_str = _extract_json_from_output(output.strip())
 
     try:
         data = json.loads(json_str)
     except json.JSONDecodeError:
-        logger.error("Failed to parse JSON from LLM output.")
+        logger.error("Invalid JSON in LLM output.")
         return None
 
     question = data.get("question")
     correct_answer = data.get("correct_answer")
     distractors = data.get("distractors")
 
-    if not isinstance(question, str) or not question.strip():
-        return None
-    if not isinstance(correct_answer, str) or not correct_answer.strip():
-        return None
-    if (
-        not isinstance(distractors, list)
-        or len(distractors) != 3
-        or not all(isinstance(d, str) and d.strip() for d in distractors)
-    ):
+    if not _is_valid_mcq(question, correct_answer, distractors):
         return None
 
     question = question.strip()
@@ -71,53 +65,73 @@ def parse_output(output, source_file):
 
     choices = [correct_answer] + distractors
     random.shuffle(choices)
-    correct_index = choices.index(correct_answer)
 
     parsed_mcq_item = {
         "question": question,
         "choices": choices,
-        "correct_index": correct_index,
-        "source_info": source_file,
+        "correct_index": choices.index(correct_answer),
+        "source_info": source_info,
     }
 
     return parsed_mcq_item
 
 
-def main(test_mode=False, num_test_lectures=1):
+def _is_valid_mcq(question, correct_answer, distractors):
+    if not isinstance(question, str) or not question.strip():
+        return False
+    if not isinstance(correct_answer, str) or not correct_answer.strip():
+        return False
+    if (
+        not isinstance(distractors, list)
+        or len(distractors) != 3
+        or not all(isinstance(d, str) and d.strip() for d in distractors)
+    ):
+        return False
+    return True
+
+
+def sample_chunks(chunks, max_samples):
+    """Uniformly sample chunks across the lecture."""
+    if len(chunks) <= max_samples:
+        return list(enumerate(chunks))
+
+    step = max(len(chunks) // max_samples, 1)
+    sampled = [(idx, chunks[idx]) for idx in range(0, len(chunks), step)]
+    return sampled[:max_samples]
+
+
+def run_generation(test_mode=False, num_test_lectures=1):
     logger.info(
-        "Starting MCQA Dataset Generation "
-        f"({'TEST MODE' if test_mode else 'FULL MODE'})"
+        "Starting MCQA Dataset Generation (%s MODE)",
+        "TEST" if test_mode else "FULL",
     )
 
-    logger.info("Loading LLM for MCQ generation...")
+    logger.info("Loading LLM...")
     llm = load_llm(
         model_path=config.GENERATION_MODEL_PATH,
         model_config=config.LLM_MODEL_CONFIG,
     )
+
     if not llm:
-        logger.error("Unable to load the generator LLM. Exiting.")
+        logger.error("Failed to load LLM. Aborting.")
         return
 
     lectures = load_transcripts_and_metadata(config.DATA_DIR)
+    if test_mode:
+        lectures = lectures[:num_test_lectures]
+        logger.warning("Running in TEST MODE (%d lecture(s))", num_test_lectures)
 
     generated_mcqs = []
-    total_chunks_processed = 0
+    total_chunks = 0
 
-    lectures_to_process = lectures
-    if test_mode:
-        logger.warning(
-            "EXECUTING IN TEST MODE. " f"Processing {num_test_lectures} lecture(s).\n"
-        )
-        lectures_to_process = lectures[:num_test_lectures]
-
-    for lecture in lectures_to_process:
+    for lecture in lectures:
         lecture_text = lecture["text"]
         source_file = lecture["source_file_txt"]
-        course_name = lecture["course_name"]
         metadata = lecture["metadata"]
+        course_details = metadata.get("course_details", {})
 
         module = metadata["course_details"].get("module")
-        formatted_course_name = course_name.replace("_", " ").title()
+        formatted_course_name = lecture["course_name"].replace("_", " ").title()
         formatted_module_name = (
             module.replace("_", " ").title() if module != "N/A_NO_MODULE" else ""
         )
@@ -129,90 +143,100 @@ def main(test_mode=False, num_test_lectures=1):
 
         chunks = chunk_text(lecture_text, config.CHUNK_SIZE, config.CHUNK_OVERLAP)
 
-        num_to_sample = config.NUM_CHUNKS_TO_SAMPLE
+        sampled_chunks = sample_chunks(chunks, config.NUM_CHUNKS_TO_SAMPLE)
 
-        if len(chunks) > num_to_sample:
-            step = len(chunks) // num_to_sample
-            sampled_chunks = [(chunks[i], i) for i in range(0, len(chunks), step)][
-                :num_to_sample
-            ]
-        else:
-            sampled_chunks = list(enumerate(chunks))
+        for idx, (chunk_index, text_chunk) in enumerate(sampled_chunks, start=1):
+            logger.info("Chunk %d/%d", idx, len(sampled_chunks))
+            total_chunks += 1
 
-        for i, (text_chunk, chunk_index) in enumerate(sampled_chunks, start=1):
-            logger.info(f"Chunk {i}/{len(sampled_chunks)}")
+            prompt = build_prompt(text_chunk)
 
-            prompt = format_prompt(text_chunk)
+            if test_mode:
+                logger.info("Text chunk:\n%s", text_chunk)
 
-            llm_messages = [
+            messages = [
                 {"role": "system", "content": ""},
                 {"role": "user", "content": prompt},
-                {"role": "assistant", "content": "<think>\n"},  # Forcing LLM to think
             ]
 
-            llm_response = generate_response(
+            response = generate_response(
                 llm,
-                messages=llm_messages,
+                messages=messages,
                 gen_config=config.LLM_GENERATION_CONFIG,
             )
-            total_chunks_processed += 1
 
-            if llm_response:
-                course_details = metadata.get("course_details", {})
-                source_info = {
-                    "course_name": course_name,
-                    "lecture_filename": source_file,
-                    "chunk_index": chunk_index,
-                    "instructor_name": course_details.get("instructor", "N/A"),
-                    "lecture_date": course_details.get("lecture_date", "N/A"),
-                }
+            if not response:
+                continue
 
-                mcq_item = parse_output(llm_response, source_info)
+            source_info = {
+                "course_name": lecture["course_name"],
+                "lecture_filename": source_file,
+                "chunk_index": chunk_index,
+                "instructor_name": course_details.get("instructor", "N/A"),
+                "lecture_date": course_details.get("lecture_date", "N/A"),
+            }
 
-                if test_mode and mcq_item:
-                    logger.debug(f"Raw LLM Output:\n{llm_response}")
-                    logger.info("Parsed MCQ:")
-                    print(json.dumps(mcq_item, indent=2, ensure_ascii=False))
-                    print("----------------------------------------\n")
+            mcq = parse_llm_output(response, source_info)
+            if not mcq:
+                continue
 
-                if mcq_item:
-                    mcq_id = (
-                        f"{os.path.splitext(source_file)[0]}"
-                        f"_c{chunk_index}_mcq{len(generated_mcqs)}"
-                    )
-                    mcq_item["id"] = mcq_id
-                    mcq_item["source_details"] = mcq_item.pop("source_info")
-                    generated_mcqs.append(mcq_item)
+            mcq["id"] = (
+                f"{os.path.splitext(source_file)[0]}"
+                f"_c{chunk_index}_mcq{len(generated_mcqs)}"
+            )
 
-    logger.info(f"MCQA generation completed")
-    logger.info(f"Processed {total_chunks_processed} sampled chunks.")
-    logger.info(f"Generated {len(generated_mcqs)} potential MCQs.")
+            if test_mode:
+                logger.debug("Raw LLM output:\n%s", response)
+                logger.info("Parsed MCQ:")
+                print(json.dumps(mcq, indent=2, ensure_ascii=False))
+                print("----------------------------------------\n")
 
-    if generated_mcqs:
-        logger.info(f"Saving generated dataset to: {config.MCQA_GENERATED_JSON}")
-        with open(config.MCQA_GENERATED_JSON, "w", encoding="utf-8") as f:
-            json.dump(generated_mcqs, f, ensure_ascii=False, indent=2)
+            generated_mcqs.append(mcq)
 
+    _save_results(generated_mcqs, total_chunks)
+    _cleanup(llm)
+
+
+def _save_results(mcqs, total_chunks):
+    logger.info("Processed %d chunks.", total_chunks)
+    logger.info("Generated %d MCQs.", len(mcqs))
+
+    if not mcqs:
+        return
+
+    logger.info("Saving dataset to %s", config.MCQA_GENERATED_JSON)
+    with open(config.MCQA_GENERATED_JSON, "w", encoding="utf-8") as f:
+        json.dump(mcqs, f, ensure_ascii=False, indent=2)
+
+
+def _cleanup(llm):
     del llm
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
 
-if __name__ == "__main__":
+def parse_args():
     parser = argparse.ArgumentParser(
-        description="Generates a MCQ dataset from transcripts."
+        description="Generate an MCQ dataset from lecture transcripts."
     )
     parser.add_argument(
         "--test",
         action="store_true",
-        help="Run in test mode, generating only a few example MCQs and printing them.",
+        help="Run in test mode with limited lectures and verbose output.",
     )
     parser.add_argument(
         "--num_lectures",
         type=int,
         default=1,
-        help="Number of lectures to process in test mode (default: 1).",
+        help="Number of lectures to process in test mode.",
     )
-    args = parser.parse_args()
-    main(test_mode=args.test, num_test_lectures=args.num_lectures)
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    run_generation(
+        test_mode=args.test,
+        num_test_lectures=args.num_lectures,
+    )
