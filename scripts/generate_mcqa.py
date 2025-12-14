@@ -6,15 +6,89 @@ import os
 import random
 import re
 
+import numpy as np
 import torch
+from sklearn.cluster import KMeans
+from sklearn.metrics.pairwise import cosine_similarity
 
 from ragqa import config
 from ragqa.data_processing import chunk_text, load_transcripts_and_metadata
+from ragqa.embedding_utils import get_embedding_model, generate_embeddings
 from ragqa.llm_interface import generate_response, load_llm
 from ragqa.prompt_loader import load_prompt
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
+
+
+def select_central_chunks(
+    chunks,
+    embeddings,
+    num_clusters=3,
+    random_state=42,
+):
+
+    if len(chunks) <= num_clusters:
+        return list(enumerate(chunks))
+
+    kmeans = KMeans(n_clusters=num_clusters, random_state=random_state, n_init="auto")
+    labels = kmeans.fit_predict(embeddings)
+    centers = kmeans.cluster_centers_
+
+    selected = []
+
+    for cluster_id in range(num_clusters):
+        cluster_indices = np.where(labels == cluster_id)[0]
+        cluster_embeddings = embeddings[cluster_indices]
+
+        similarities = cosine_similarity(
+            cluster_embeddings, centers[cluster_id].reshape(1, -1)
+        ).squeeze()
+
+        best_index = cluster_indices[np.argmax(similarities)]
+        selected.append((best_index, chunks[best_index]))
+
+    selected.sort(key=lambda x: x[0])
+    return selected
+
+
+def mmr_select(
+    candidates,
+    embeddings,
+    k=3,
+    lambda_weight=0.7,
+):
+    """
+    Maximal Marginal Relevance (MMR) selection.
+    """
+    selected_indices = [0]
+
+    while len(selected_indices) < min(k, len(candidates)):
+        scores = []
+
+        for i in range(len(candidates)):
+            if i in selected_indices:
+                continue
+
+            relevance = cosine_similarity(
+                embeddings[i].reshape(1, -1),
+                embeddings[selected_indices].mean(axis=0).reshape(1, -1),
+            )[0][0]
+
+            diversity = max(
+                cosine_similarity(
+                    embeddings[i].reshape(1, -1),
+                    embeddings[j].reshape(1, -1),
+                )[0][0]
+                for j in selected_indices
+            )
+
+            score = lambda_weight * relevance - (1 - lambda_weight) * diversity
+            scores.append((score, i))
+
+        selected_indices.append(max(scores, key=lambda x: x[0])[1])
+
+    return [candidates[i] for i in selected_indices]
 
 
 def build_prompt(text_chunk):
@@ -90,16 +164,6 @@ def _is_valid_mcq(question, correct_answer, distractors):
     return True
 
 
-def sample_chunks(chunks, max_samples):
-    """Uniformly sample chunks across the lecture."""
-    if len(chunks) <= max_samples:
-        return list(enumerate(chunks))
-
-    step = max(len(chunks) // max_samples, 1)
-    sampled = [(idx, chunks[idx]) for idx in range(0, len(chunks), step)]
-    return sampled[:max_samples]
-
-
 def run_generation(test_mode=False, num_test_lectures=1):
     logger.info(
         "Starting MCQA Dataset Generation (%s MODE)",
@@ -121,6 +185,7 @@ def run_generation(test_mode=False, num_test_lectures=1):
         lectures = lectures[:num_test_lectures]
         logger.warning("Running in TEST MODE (%d lecture(s))", num_test_lectures)
 
+    embedding_model = get_embedding_model(config.EMBEDDING_MODEL_NAME)
     generated_mcqs = []
     total_chunks = 0
 
@@ -143,7 +208,17 @@ def run_generation(test_mode=False, num_test_lectures=1):
 
         chunks = chunk_text(lecture_text, config.CHUNK_SIZE, config.CHUNK_OVERLAP)
 
-        sampled_chunks = sample_chunks(chunks, config.NUM_CHUNKS_TO_SAMPLE)
+        embeddings = generate_embeddings(
+            texts=chunks,
+            embedding_model=embedding_model,
+            batch_size=32,
+        )
+
+        sampled_chunks = select_central_chunks(
+            chunks=chunks,
+            embeddings=embeddings,
+            num_clusters=3,
+        )
 
         for idx, (chunk_index, text_chunk) in enumerate(sampled_chunks, start=1):
             logger.info("Chunk %d/%d", idx, len(sampled_chunks))
@@ -171,7 +246,7 @@ def run_generation(test_mode=False, num_test_lectures=1):
             source_info = {
                 "course_name": lecture["course_name"],
                 "lecture_filename": source_file,
-                "chunk_index": chunk_index,
+                "chunk_index": int(chunk_index),
                 "instructor_name": course_details.get("instructor", "N/A"),
                 "lecture_date": course_details.get("lecture_date", "N/A"),
             }
