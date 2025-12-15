@@ -2,6 +2,7 @@ import logging
 import json
 from pathlib import Path
 from tqdm import tqdm
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 logger = logging.getLogger(__name__)
 
@@ -91,27 +92,35 @@ def load_transcripts_and_metadata(data_dir: str) -> list[dict]:
 
 
 def chunk_text(text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
-    """
-    Split the text into chunks of specified size with overlap.
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        separators=["\n\n", "\n", ".", " ", ""],
+    )
 
-    Args:
-        text (str): The text to be chunked.
-        chunk_size (int): The size of each chunk.
-        chunk_overlap (int): The number of overlapping characters between consecutive
-            chunks.
-
-    Returns:
-        list[str]: A list of text chunks.
-    """
-    if chunk_overlap >= chunk_size:
-        raise ValueError("Chunk overlap must be less than chunk size.")
+    raw_chunks = splitter.split_text(text)
 
     chunks = []
-    start_index = 0
-    while start_index < len(text):
-        end_index = start_index + chunk_size
-        chunk = text[start_index:end_index].strip()
-        if chunk and len(chunk) > 50:
-            chunks.append(chunk)
-        start_index += chunk_size - chunk_overlap
+    cursor = 0
+
+    for chunk in raw_chunks:
+        start = text.find(chunk, cursor)
+
+        if start == -1:
+            start = text.find(chunk)
+            if start == -1:
+                continue
+
+        end = start + len(chunk)
+
+        chunks.append(
+            {
+                "text": chunk,
+                "char_start": start,
+                "char_end": end,
+            }
+        )
+
+        cursor = start + 1
+
     return chunks
