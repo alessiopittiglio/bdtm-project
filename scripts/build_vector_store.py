@@ -37,15 +37,21 @@ def main():
     all_metadatas = []
     all_ids = []
 
-    for idx, doc in enumerate(all_lessons_data):
+    for doc in all_lessons_data:
         doc_text = doc["text"]
         doc_source = doc["source_file_txt"]
         chunks = chunk_text(doc_text, config.CHUNK_SIZE, config.CHUNK_OVERLAP)
 
         for i, chunk in enumerate(chunks):
-            chunk_id = f"{doc_source}_{idx}_chunk_{i}"
-            all_chunks_texts.append(chunk)
-            all_metadatas.append({"source": doc_source})
+            chunk_id = f"{doc_source}_c{chunk['char_start']}_{chunk['char_end']}"
+            all_chunks_texts.append(chunk["text"])
+            all_metadatas.append(
+                {
+                    "source": doc_source,
+                    "char_start": chunk["char_start"],
+                    "char_end": chunk["char_end"],
+                }
+            )
             all_ids.append(chunk_id)
 
     if all_chunks_texts:
