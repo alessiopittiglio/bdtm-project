@@ -2,7 +2,6 @@ import argparse
 import gc
 import json
 import logging
-import os
 import random
 import re
 
@@ -52,45 +51,6 @@ def select_central_chunks(
     return selected
 
 
-def mmr_select(
-    candidates,
-    embeddings,
-    k=3,
-    lambda_weight=0.7,
-):
-    """
-    Maximal Marginal Relevance (MMR) selection.
-    """
-    selected_indices = [0]
-
-    while len(selected_indices) < min(k, len(candidates)):
-        scores = []
-
-        for i in range(len(candidates)):
-            if i in selected_indices:
-                continue
-
-            relevance = cosine_similarity(
-                embeddings[i].reshape(1, -1),
-                embeddings[selected_indices].mean(axis=0).reshape(1, -1),
-            )[0][0]
-
-            diversity = max(
-                cosine_similarity(
-                    embeddings[i].reshape(1, -1),
-                    embeddings[j].reshape(1, -1),
-                )[0][0]
-                for j in selected_indices
-            )
-
-            score = lambda_weight * relevance - (1 - lambda_weight) * diversity
-            scores.append((score, i))
-
-        selected_indices.append(max(scores, key=lambda x: x[0])[1])
-
-    return [candidates[i] for i in selected_indices]
-
-
 def build_prompt(text_chunk):
     prompt_template = load_prompt(config.GENERATION_PROMPT_PATH)
 
@@ -114,7 +74,18 @@ def _extract_json_from_output(output):
     return None
 
 
-def parse_llm_output(output, source_info):
+def find_quote_offsets(text, quote):
+    start = text.find(quote)
+    if start == -1:
+        return None
+    return {
+        "quote": quote,
+        "start_char": start,
+        "end_char": start + len(quote),
+    }
+
+
+def parse_llm_output(output, source_info, chunk):
     if not output:
         return None
 
@@ -125,6 +96,12 @@ def parse_llm_output(output, source_info):
     except json.JSONDecodeError:
         logger.error("Invalid JSON in LLM output.")
         return None
+
+    evidence = []
+    for quote in data.get("evidences", [])[:3]:
+        offsets = find_quote_offsets(chunk, quote.strip())
+        if offsets:
+            evidence.append(offsets)
 
     question = data.get("question")
     correct_answer = data.get("correct_answer")
@@ -145,6 +122,7 @@ def parse_llm_output(output, source_info):
         "choices": choices,
         "correct_index": choices.index(correct_answer),
         "source_info": source_info,
+        "evidence": evidence,
     }
 
     return parsed_mcq_item
@@ -206,6 +184,8 @@ def run_generation(test_mode=False, num_test_lectures=1):
             f"{formatted_course_name} {formatted_module_name})"
         )
 
+        doc_id = f"{lecture['course_name']}_{source_file}"
+
         chunks = chunk_text(lecture_text, config.CHUNK_SIZE, config.CHUNK_OVERLAP)
 
         embeddings = generate_embeddings(
@@ -220,9 +200,10 @@ def run_generation(test_mode=False, num_test_lectures=1):
             num_clusters=3,
         )
 
-        for idx, (chunk_index, text_chunk) in enumerate(sampled_chunks, start=1):
+        for idx, (chunk_idx, chunk) in enumerate(sampled_chunks, start=1):
             logger.info("Chunk %d/%d", idx, len(sampled_chunks))
             total_chunks += 1
+            text_chunk = chunk["text"]
 
             prompt = build_prompt(text_chunk)
 
@@ -244,21 +225,21 @@ def run_generation(test_mode=False, num_test_lectures=1):
                 continue
 
             source_info = {
+                "doc_id": doc_id,
+                "chunk_id": f"{doc_id}_c{chunk['char_start']}_{chunk['char_end']}",
+                "char_start": chunk["char_start"],
+                "char_end": chunk["char_end"],
                 "course_name": lecture["course_name"],
                 "lecture_filename": source_file,
-                "chunk_index": int(chunk_index),
                 "instructor_name": course_details.get("instructor", "N/A"),
                 "lecture_date": course_details.get("lecture_date", "N/A"),
             }
 
-            mcq = parse_llm_output(response, source_info)
+            mcq = parse_llm_output(response, source_info, text_chunk)
             if not mcq:
                 continue
 
-            mcq["id"] = (
-                f"{os.path.splitext(source_file)[0]}"
-                f"_c{chunk_index}_mcq{len(generated_mcqs)}"
-            )
+            mcq["id"] = f"{source_info['chunk_id']}_mcq"
 
             if test_mode:
                 logger.debug("Raw LLM output:\n%s", response)
