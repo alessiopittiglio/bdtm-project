@@ -1,0 +1,21 @@
+You are assisting in the construction of an evaluation dataset for a RAG system.
+
+Below are numbered chunks extracted from a university lecture of a Master's program in AI.
+
+Your task is to select exactly 3 chunks that are most suitable for generating high-quality multiple-choice questions.
+
+Selection criteria:
+1. Prefer chunks that introduce concepts, definitions, properties, and procedures.
+2. The chunk should contain information that allows you to write a question that can be answered clearly, with plausible distractors and whose answer is grounded in the text.
+3. Avoid introductory passages, rhetorical examples, jokes, anecdotes, and historical references.
+4. Prefer chunks that cover different conceptual levels.
+5. If two chunks cover overlapping content, select only one.
+
+Chunks:
+{chunks_block}
+
+Return strictly in the following JSON format:
+
+{{
+  "selected_chunks": [id1, id2, id3]
+}}
