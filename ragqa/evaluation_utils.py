@@ -1,91 +1,102 @@
-import pandas as pd
-import os
+import logging
 import re
+from pathlib import Path
+
+import pandas as pd
+
+logger = logging.getLogger(__name__)
+
+VALID_CHOICES = {"A", "B", "C", "D"}
+
+CHOICE_PATTERN = re.compile(r"^\s*([A-D])(?:[.\s]|$)", re.IGNORECASE)
+
+CHOICE_FALLBACK_PATTERN = re.compile(r"\b([A-D])\b", re.IGNORECASE)
 
 
-def parse_llm_choice(llm_output_string: str) -> str:
-    """
-    Extracts the first letter A, B, C, or D from the LLM output.
-    Returns the letter or an error string.
-    """
-    if not llm_output_string:
-        return "ERROR_EMPTY_OUTPUT"
+def parse_llm_choice(output: str) -> str:
+    """Extract the first valid choice (A, B, C, or D) from LLM output."""
+    if not output:
+        return None
 
-    # Look for a single letter A, B, C, or D, possibly with spaces around or punctuation
-    match = re.match(
-        r"^\s*([A-D])(?:[.\s]|$)", llm_output_string.strip(), re.IGNORECASE
-    )
+    text = output.strip()
+
+    match = CHOICE_PATTERN.match(text)
     if match:
         return match.group(1).upper()
-    else:
-        # If no exact match is found, try to find the letter anywhere in the string
-        # (this is less restrictive, may give false positives but captures more cases)
-        search_match = re.search(r"([A-D])", llm_output_string, re.IGNORECASE)
-        if search_match:
-            return search_match.group(1).upper()
-        return "ERROR_PARSING_CHOICE"
+
+    fallback = CHOICE_FALLBACK_PATTERN.search(text)
+    if fallback:
+        return fallback.group(1).upper()
+
+    return None
 
 
-def calculate_accuracy(results_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Calculate accuracy and other statistics from the detailed results DataFrame.
-    Returns a summary DataFrame.
-    """
-    if results_df is None or results_df.empty:
+def calculate_accuracy(results: pd.DataFrame) -> pd.DataFrame:
+    """Compute accuracy and summary statistics per experiment."""
+    if results is None or results.empty:
         return pd.DataFrame()
 
-    valid_predictions_df = results_df[
-        results_df["predicted_letter"].isin(["A", "B", "C", "D"])
-    ].copy()
+    df = results.copy()
 
-    valid_predictions_df["is_correct_numeric"] = (
-        valid_predictions_df["is_correct"].fillna(False).astype(int)
+    df["is_valid"] = df["correct"].isin(VALID_CHOICES)
+    df["is_correct_numeric"] = df["is_correct"].fillna(False).astype(int)
+
+    grouped = df.groupby("experiment", sort=False)
+
+    summary = grouped.agg(
+        total_questions=("experiment", "size"),
+        valid_predictions=("is_valid", "sum"),
+        correct_predictions=("is_correct_numeric", "sum"),
+    ).reset_index()
+
+    summary["error_predictions"] = (
+        summary["total_questions"] - summary["valid_predictions"]
     )
 
-    summary_list = []
-    for config_name, group in valid_predictions_df.groupby("config_name"):
-        total_questions_for_config = len(
-            results_df[results_df["config_name"] == config_name]
+    summary["accuracy_percent"] = (
+        (
+            100
+            * summary["correct_predictions"]
+            / summary["valid_predictions"].replace(0, pd.NA)
         )
-        valid_answers = len(group)
-        correct_answers = group["is_correct_numeric"].sum()
+        .fillna(0.0)
+        .round(2)
+    )
 
-        accuracy = (correct_answers / valid_answers * 100) if valid_answers > 0 else 0.0
-        error_predictions = total_questions_for_config - valid_answers
-
-        summary_list.append(
-            {
-                "config_name": config_name,
-                "accuracy_perc": round(accuracy, 2),
-                "correct_predictions": correct_answers,
-                "valid_predictions_count": valid_answers,
-                "error_predictions_count": error_predictions,
-                "total_questions_attempted": total_questions_for_config,
-            }
-        )
-
-    return pd.DataFrame(summary_list)
+    return summary[
+        [
+            "experiment",
+            "accuracy_percent",
+            "correct_predictions",
+            "valid_predictions",
+            "error_predictions",
+            "total_questions",
+        ]
+    ]
 
 
-def save_results_to_csv(
-    detailed_df: pd.DataFrame,
-    summary_df: pd.DataFrame,
-    results_dir: str,
-    base_filename: str,
+def save_results(
+    detailed: pd.DataFrame,
+    summary: pd.DataFrame,
+    output_dir: str,
+    base_name: str,
 ):
-    """Save detailed and summary DataFrames to CSV files."""
-    os.makedirs(results_dir, exist_ok=True)
+    """Save detailed and summary results as CSV files."""
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
 
-    detailed_filepath = os.path.join(results_dir, f"{base_filename}_detailed.csv")
-    summary_filepath = os.path.join(results_dir, f"{base_filename}_summary.csv")
+    detailed_file = output_path / f"{base_name}_detailed.csv"
+    summary_file = output_path / f"{base_name}_summary.csv"
 
     try:
-        detailed_df.to_csv(detailed_filepath, index=False, encoding="utf-8-sig")
-        print(f"Detailed results saved to: {detailed_filepath}")
-        if summary_df is not None and not summary_df.empty:
-            summary_df.to_csv(summary_filepath, index=False, encoding="utf-8-sig")
-            print(f"Summary saved to: {summary_filepath}")
+        detailed.to_csv(detailed_file, index=False, encoding="utf-8-sig")
+        logger.info("Detailed results saved to %s", detailed_file)
+
+        if summary is not None and not summary.empty:
+            summary.to_csv(summary_file, index=False, encoding="utf-8-sig")
+            logger.info("Summary results saved to %s", summary_file)
         else:
-            print("No summary to save.")
-    except Exception as e:
-        print(f"ERROR while saving CSV results: {e}")
+            logger.info("Summary is empty. Skipping save.")
+
+    except OSError:
+        logger.exception("Failed to save results to %s", output_path)
