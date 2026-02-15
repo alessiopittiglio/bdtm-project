@@ -1,126 +1,118 @@
-import logging
 import json
+import logging
 from pathlib import Path
+from typing import Any
+
 from tqdm import tqdm
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 logger = logging.getLogger(__name__)
 
 
 def load_transcripts(data_dir: str) -> list[dict]:
-    """
-    Load all .txt files from the given directory.
+    """Load all `.txt` files recursively from a directory."""
+    root = Path(data_dir)
 
-    Args:
-        data_dir (str): The directory containing the .txt files.
-
-    Returns:
-        list[dict]: A list of dictionaries, each containing 'text' and 'source' (the
-            filename).
-    """
-    documents = []
-    data_path = Path(data_dir)
-
-    for file_path in data_path.rglob("*.txt"):
-        with open(file_path, "r", encoding="utf-8") as f:
-            text = f.read()
-            documents.append(
-                {
-                    "text": text,
-                    "source": file_path.name,
-                }
-            )
-    return documents
+    return [
+        {
+            "text": path.read_text(encoding="utf-8"),
+            "source": path.name,
+        }
+        for path in root.rglob("*.txt")
+    ]
 
 
 def load_transcripts_and_metadata(data_dir: str) -> list[dict]:
-    """
-    Load transcripts and metadata from the specified directory.
+    """Load transcripts and corresponding metadata from a structured directory."""
+    root = Path(data_dir)
+    documents = []
 
-    Args:
-        data_dir (str): The directory containing the .txt files and metadata files.
-
-    Returns:
-        list[dict]: A list of dictionaries, each containing 'text', 'source_file_txt',
-            'course_name', and 'metadata'.
-    """
-    all_documents_data = []
-    data_path = Path(data_dir)
-
-    for course_dir in data_path.iterdir():
+    for course_dir in root.iterdir():
         if not course_dir.is_dir():
             continue
 
         course_name = course_dir.name
+
         module_dirs = [
             d
             for d in course_dir.iterdir()
             if d.is_dir() and d.name.startswith("module")
         ]
-
-        target_dirs = module_dirs if module_dirs else [course_dir]
+        target_dirs = module_dirs or [course_dir]
 
         for target_dir in target_dirs:
-            transcript_path = target_dir / "transcripts_txt"
-            metadata_path = target_dir / "transcripts_metadata"
+            transcripts_dir = target_dir / "transcripts_txt"
+            metadata_dir = target_dir / "transcripts_metadata"
 
-            for txt_file_path in tqdm(
-                transcript_path.glob("*.txt"),
+            for txt_path in tqdm(
+                transcripts_dir.glob("*.txt"),
                 desc=f"Lectures: {course_name}",
                 leave=False,
             ):
-                base_filename = txt_file_path.stem
-                meta_file_path = metadata_path / f"{base_filename}.json"
+                metadata_path = metadata_dir / f"{txt_path.stem}.json"
 
-                with open(meta_file_path, "r", encoding="utf-8") as f_meta:
-                    metadata_content = json.load(f_meta)
+                text = txt_path.read_text(encoding="utf-8")
+                metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
 
-                with open(txt_file_path, "r", encoding="utf-8") as f_txt:
-                    text_content = f_txt.read()
-
-                all_documents_data.append(
+                documents.append(
                     {
-                        "text": text_content,
-                        "source_file_txt": base_filename,
+                        "text": text,
+                        "source_file_txt": txt_path.stem,
                         "course_name": course_name,
-                        "metadata": metadata_content,
+                        "relative_path": str(txt_path.relative_to(root)),
+                        "metadata": metadata,
                     }
                 )
 
-    logger.info(f"Loaded {len(all_documents_data)} transcripts.")
-    return all_documents_data
+    logger.info("Loaded %d transcripts.", len(documents))
+    return documents
 
 
-def chunk_text(text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        separators=["\n\n", "\n", ".", " ", ""],
+def chunk_text(
+    text: str,
+    embedding_model: Any,
+    chunk_size: int,
+    overlap: int,
+) -> list[dict]:
+    """Split text into overlapping token chunks."""
+    if overlap >= chunk_size:
+        raise ValueError("overlap must be smaller than chunk size.")
+
+    tokenizer = embedding_model.tokenizer
+
+    encoding = tokenizer(
+        text,
+        add_special_tokens=False,
+        return_offsets_mapping=True,
     )
 
-    raw_chunks = splitter.split_text(text)
+    input_ids = encoding["input_ids"]
+    offsets = encoding["offset_mapping"]
 
+    if not input_ids:
+        return []
+
+    stride = chunk_size - overlap
     chunks = []
-    cursor = 0
 
-    for chunk in raw_chunks:
-        start = text.find(chunk, cursor)
+    for start_token in range(0, len(input_ids), stride):
+        end_token = min(start_token + chunk_size, len(input_ids))
 
-        if start == -1:
-            start = text.find(chunk)
-            if start == -1:
-                continue
+        start_char = offsets[start_token][0]
+        end_char = offsets[end_token - 1][1]
 
-        end = start + len(chunk)
+        chunk_text = text[start_char:end_char]
 
         chunks.append(
             {
-                "text": chunk,
-                "char_start": start,
-                "char_end": end,
+                "text": chunk_text,
+                "start_token": start_token,
+                "end_token": end_token,
+                "start_char": start_char,
+                "end_char": end_char,
             }
         )
 
-        cursor = start + 1
+        if end_token >= len(input_ids):
+            break
 
     return chunks
