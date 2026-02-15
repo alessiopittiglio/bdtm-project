@@ -1,61 +1,62 @@
 import logging
+import re
+from pathlib import Path
+
 from llama_cpp import Llama
 
 logger = logging.getLogger(__name__)
 
+CHANNEL_FINAL_PATTERN = re.compile(r"<\|channel\|>final<\|message\|>\s*")
 
-def load_llm(model_path, model_config=None):
-    """
-    Loads a GGUF LLM model
 
-    Args:
-        model_path (str): Path to the .gguf model file.
-        gguf_config (dict): Dictionary of parameters for loading the model.
-
-    Returns:
-        Llama: Loaded Llama object or None if an error occurs.
-    """
-    llm = None
-    model_path_str = str(model_path)
-    model_params = model_config or {}
-
+def load_model(model_path: Path, config: dict | None = None) -> Llama | None:
+    """Load a GGUF Llama model."""
     try:
-        llm = Llama(
-            model_path=model_path_str,
-            **model_params,
+        return Llama(
+            model_path=str(model_path),
+            **(config or {}),
         )
-    except Exception as e:
-        logger.error(f"Error loading GGUF model {model_path}: {e}")
+    except Exception:
+        logger.exception("Failed to load GGUF model from %s", model_path)
         return None
 
-    return llm
+
+def clean_output(text: str | None) -> str | None:
+    if not text:
+        return text
+
+    match = CHANNEL_FINAL_PATTERN.search(text)
+    cleaned = text[match.end() :] if match else text
+
+    return cleaned.strip()
 
 
-def generate_response(llm, messages, gen_config=None):
+def generate_response(
+    llm: Llama,
+    messages: list[dict],
+    config: dict | None = None,
+    return_raw: bool = False,
+) -> str | tuple[str, str] | None:
     """
-    Generates a response from the loaded GGUF LLM using create_chat_completion.
-
-    Args:
-        llm (Llama): The loaded Llama object.
-        messages (list): A list of message dictionaries, e.g.,
-             [{"role": "user", "content": "Your prompt"}].
-        gen_params (dict): Dictionary of generation parameters
-            (e.g., max_tokens, temperature, top_p, stop).
-
-    Returns:
-        str: The generated response text or None if an error occurs.
+    Generate a chat response from a loaded GGUF model.
     """
-    gen_params = gen_config or {}
-    response_text = None
-
     try:
         response = llm.create_chat_completion(
             messages=messages,
-            **gen_params,
+            **(config or {}),
         )
-        response_text = response["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        logger.error(f"Error generating response: {e}")
-        return None
 
-    return response_text
+        raw_text = response["choices"][0]["message"]["content"]
+        cleaned_text = clean_output(raw_text)
+
+        if return_raw:
+            return raw_text.strip(), cleaned_text
+
+        return cleaned_text
+
+    except (KeyError, IndexError, TypeError):
+        logger.exception("Unexpected response format from LLM.")
+    except Exception:
+        logger.exception("Failed to generate response.")
+
+    return None
