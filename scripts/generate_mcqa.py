@@ -1,11 +1,13 @@
 import argparse
 import gc
 import json
+import hashlib
 import logging
 import re
 from pathlib import Path
 
 import torch
+from rapidfuzz import fuzz
 
 from ragqa import config
 from ragqa.data_processing import chunk_text, load_transcripts_and_metadata
@@ -20,8 +22,8 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 logger.info("Using device: %s", device)
 
 
-def find_substring_offsets(text: str, substring: str):
-    """Return (start, end) offsets of substring inside text."""
+def find_substring_offsets(text: str, substring: str, threshold: int = 85):
+    """Return (start, end) offsets of substring inside text using fuzzy match."""
     if not substring:
         return None
 
@@ -29,14 +31,19 @@ def find_substring_offsets(text: str, substring: str):
     if start != -1:
         return start, start + len(substring)
 
-    text_lower = text.lower()
-    sub_lower = substring.lower()
+    window_size = len(substring)
+    best_score = 0
+    best_span = None
 
-    start = text_lower.find(sub_lower)
-    if start != -1:
-        return start, start + len(substring)
+    for i in range(0, len(text) - window_size + 1):
+        window = text[i : i + window_size]
+        score = fuzz.partial_ratio(window, substring)
 
-    return None
+        if score > best_score:
+            best_score = score
+            best_span = (i, i + window_size)
+
+    return best_span if best_score >= threshold else None
 
 
 def extract_json_block(text: str) -> dict:
@@ -109,6 +116,22 @@ def is_valid_mcq(question, options, correct_answer):
         and isinstance(correct_answer, str)
         and correct_answer in {"A", "B", "C", "D"}
     )
+
+
+def extract_course_info(lecture):
+    """Extract only the course information needed for MCQ source metadata."""
+    details = lecture.get("metadata", {}).get("course_details", {})
+
+    module = details.get("module")
+    if module == "N/A_NO_MODULE":
+        module = None
+
+    return {
+        "name": lecture.get("course_name"),
+        "lecture_num": details.get("lecture_num"),
+        "module": module,
+        "lecture_date": details.get("lecture_date"),
+    }
 
 
 def parse_mcq(output: str):
@@ -190,26 +213,16 @@ def run_generation(test_mode: bool = False, num_test_lectures: int = 1):
 
 def process_lecture(lecture, llm, embedding_model, test_mode):
     lecture_text = lecture["text"]
-    source_file = lecture["source_file_txt"]
-    metadata = lecture["metadata"]
-    course_details = metadata.get("course_details", {})
+    course_info = extract_course_info(lecture)
+    doc_id = lecture["relative_path"]
 
-    lecture_num = course_details.get("lecture_num")
-    module = course_details.get("module")
-    instructor = course_details.get("instructor", "N/A")
-    lecture_date = course_details.get("lecture_date", "N/A")
-
-    lines = [
-        f"Lecture {lecture_num}",
-        f"Course: {lecture['course_name']}",
-    ]
-
-    if module and module != "N/A_NO_MODULE":
-        lines.append(f"Module: {module}")
-
-    logger.info("\n%s\n%s\n%s", "-" * 60, "\n".join(lines), "-" * 60)
-
-    doc_id = f"{lecture['course_name']}_{source_file}"
+    logger.info(
+        "\n%s\nLecture %s - %s\n%s",
+        "-" * 60,
+        course_info["lecture_num"],
+        lecture["course_name"],
+        "-" * 60,
+    )
 
     chunks = chunk_text(
         lecture_text,
@@ -229,12 +242,10 @@ def process_lecture(lecture, llm, embedding_model, test_mode):
     for chunk_id in selected_ids:
         mcq = generate_mcq(
             chunks[chunk_id],
-            lecture,
             doc_id,
             llm,
+            course_info,
             test_mode,
-            instructor,
-            lecture_date,
         )
         if mcq:
             mcqs.append(mcq)
@@ -242,7 +253,7 @@ def process_lecture(lecture, llm, embedding_model, test_mode):
     return mcqs
 
 
-def generate_mcq(chunk, lecture, doc_id, llm, test_mode, instructor, lecture_date):
+def generate_mcq(chunk, doc_id, llm, course_info, test_mode):
     context = chunk["text"]
 
     prompt = build_generation_prompt(context)
@@ -264,9 +275,10 @@ def generate_mcq(chunk, lecture, doc_id, llm, test_mode, instructor, lecture_dat
         logger.warning("Failed to parse MCQ.")
         return None
 
-    evidence = mcq.get("evidence")
+    base_string = f"{doc_id}_{chunk['start_char']}_{mcq['question']}"
+    mcq["id"] = hashlib.md5(base_string.encode()).hexdigest()
 
-    offsets = find_substring_offsets(context, evidence)
+    offsets = find_substring_offsets(context, mcq.get("evidence"))
     if not offsets:
         logger.warning("Evidence not found in chunk.")
         return None
@@ -280,10 +292,7 @@ def generate_mcq(chunk, lecture, doc_id, llm, test_mode, instructor, lecture_dat
             "start_char": chunk["start_char"] + local_start,
             "end_char": chunk["start_char"] + local_end,
         },
-        "course_name": lecture["course_name"],
-        "lecture_filename": lecture["source_file_txt"],
-        "instructor_name": instructor,
-        "lecture_date": lecture_date,
+        "course": course_info,
     }
 
     if test_mode:
