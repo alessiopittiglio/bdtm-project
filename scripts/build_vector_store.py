@@ -1,7 +1,9 @@
+import argparse
 import hashlib
 import logging
 
 import torch
+import yaml
 
 from ragqa import config
 from ragqa.data_processing import chunk_text, load_transcripts_and_metadata
@@ -19,25 +21,29 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 logger.info(f"Using device: {device}")
 
 
+def load_yaml(path):
+    """Load a YAML file."""
+    with open(path, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
 def generate_chunk_id(relative_path: str, start_token: int, end_token: int) -> str:
     base = f"{relative_path}_{start_token}_{end_token}"
     return hashlib.sha1(base.encode("utf-8")).hexdigest()
 
 
-def prepare_chunks(documents, embedding_model):
+def prepare_chunks(documents, embedding_model, chunk_size, chunk_overlap):
     texts = []
     metadatas = []
     ids = []
 
     for doc in documents:
+        text = doc["text"]
         source_file = doc["source_file_txt"]
         relative_path = doc["relative_path"]
 
         chunks = chunk_text(
-            doc["text"],
-            embedding_model,
-            config.RETRIEVAL_CHUNK_SIZE,
-            config.RETRIEVAL_CHUNK_OVERLAP,
+            text, embedding_model, chunk_size=chunk_size, overlap=chunk_overlap
         )
 
         for chunk in chunks:
@@ -53,6 +59,8 @@ def prepare_chunks(documents, embedding_model):
                     "source": source_file,
                     "start_token": chunk["start_token"],
                     "end_token": chunk["end_token"],
+                    "start_char": chunk["start_char"],
+                    "end_char": chunk["end_char"],
                 }
             )
             ids.append(chunk_id)
@@ -60,8 +68,12 @@ def prepare_chunks(documents, embedding_model):
     return texts, metadatas, ids
 
 
-def build_vector_index(collection, embedding_model, documents):
-    texts, metadatas, ids = prepare_chunks(documents, embedding_model)
+def build_vector_index(
+    collection, embedding_model, documents, chunk_size, chunk_overlap
+):
+    texts, metadatas, ids = prepare_chunks(
+        documents, embedding_model, chunk_size, chunk_overlap
+    )
 
     if not texts:
         logger.warning("No chunks found. Skipping vector indexing.")
@@ -69,38 +81,77 @@ def build_vector_index(collection, embedding_model, documents):
 
     embeddings = encode_texts(
         texts=texts,
-        embedding_model=embedding_model,
-        normalize_embeddings=True,
+        model=embedding_model,
+        normalize=True,
     )
 
     add_documents(
         collection=collection,
-        texts=texts,
+        documents=texts,
         embeddings=embeddings,
         metadatas=metadatas,
         ids=ids,
     )
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Build a vector index for RAG.")
+
+    parser.add_argument(
+        "--input-dir",
+        type=str,
+        default=config.CLEANED_DIR,
+        help="Input transcript directory.",
+    )
+
+    parser.add_argument(
+        "--vector-dir",
+        type=str,
+        default=config.VECTOR_STORE_DIR,
+        help="Vector store directory.",
+    )
+
+    parser.add_argument(
+        "--collection",
+        type=str,
+        default=config.COLLECTION_NAME,
+        help="Collection name.",
+    )
+
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="configs/retrieval/mpnet_256.yaml",
+        help="Experiment config file.",
+    )
+
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+    cfg = load_yaml(args.config)
+
     embedding_model = get_embedding_model(
-        model_name=config.EMBEDDING_MODEL_NAME,
+        model_name=cfg["embedding_model"],
         device=device,
     )
 
-    client = create_client(config.VECTOR_STORE_DIR)
+    client = create_client(args.vector_dir)
     collection = get_or_create_collection(
         client=client,
-        collection_name=config.COLLECTION_NAME,
-        metadata_config={"hnsw:space": "cosine"},
+        name=args.collection,
+        metadata={"hnsw:space": "cosine"},
     )
 
-    documents = load_transcripts_and_metadata(config.CLEANED_DIR)
+    documents = load_transcripts_and_metadata(args.input_dir)
 
     build_vector_index(
         collection=collection,
         embedding_model=embedding_model,
         documents=documents,
+        chunk_size=cfg["chunk_size"],
+        chunk_overlap=cfg["overlap"],
     )
 
     if collection.count() > 0:
@@ -109,8 +160,8 @@ def main():
 
         query_embedding = encode_texts(
             texts=[query_text],
-            embedding_model=embedding_model,
-            normalize_embeddings=True,
+            model=embedding_model,
+            normalize=True,
         )
 
         results = collection.query(
