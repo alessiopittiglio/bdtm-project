@@ -8,6 +8,7 @@ from pathlib import Path
 import pandas as pd
 import torch
 import yaml
+from sentence_transformers import CrossEncoder
 from tqdm import tqdm
 
 from ragqa import config
@@ -43,6 +44,14 @@ def load_experiment_config(path: Path):
         "generation": generation_cfg,
         "mode": exp_cfg.get("mode", "rag"),
     }
+
+
+def load_full_lecture_text(doc_id: str):
+    path = Path(config.CLEANED_DIR) / doc_id
+    if not path.exists():
+        logger.warning("Lecture file not found: %s", path)
+        return ""
+    return path.read_text(encoding="utf-8")
 
 
 def load_mcq_dataset(path: str):
@@ -118,6 +127,22 @@ def retrieve_chunks(
         return [], []
 
 
+def load_reranker(model_name):
+    logger.info("Loading reranker: %s", model_name)
+    return CrossEncoder(model_name, device=device)
+
+
+def rerank_contexts(question, contexts, reranker, top_k):
+    if not contexts:
+        return contexts
+
+    pairs = [(question, ctx) for ctx in contexts]
+    scores = reranker.predict(pairs)
+
+    ranked = sorted(zip(contexts, scores), key=lambda x: x[1], reverse=True)
+    return [ctx for ctx, _ in ranked[:top_k]]
+
+
 # ------------------------------------------------------------------
 # METRICS
 # ------------------------------------------------------------------
@@ -161,7 +186,35 @@ def run_llm_only(mcq, llm, generation_cfg):
     response = generate_response(
         llm=llm,
         messages=[
-            {"role": "system", "content": "Reasoning: low"},
+            {"role": "system", "content": ""},
+            {"role": "user", "content": prompt},
+        ],
+        config=generation_cfg["generation_config"],
+    )
+
+    if response is None:
+        return "", {}
+
+    return parse_llm_choice(response), {}
+
+
+def run_long_context(mcq, llm, generation_cfg):
+    doc_id = mcq["source_info"]["doc_id"]
+    full_text = load_full_lecture_text(doc_id)
+
+    if not full_text:
+        return "", {}
+
+    prompt = build_prompt(
+        mcq["question"],
+        mcq["options"],
+        contexts=[full_text],
+    )
+
+    response = generate_response(
+        llm=llm,
+        messages=[
+            {"role": "system", "content": ""},
             {"role": "user", "content": prompt},
         ],
         config=generation_cfg["generation_config"],
@@ -183,6 +236,7 @@ def run_rag(
     llm,
     retrieval_cfg,
     generation_cfg,
+    reranker=None,
 ):
     """Run full RAG pipeline for a single question."""
 
@@ -199,12 +253,22 @@ def run_rag(
         retrieval_cfg["top_k"],
     )
 
+    if reranker:
+        contexts = rerank_contexts(
+            mcq["question"],
+            contexts,
+            reranker,
+            retrieval_cfg["rerank_top_k"],
+        )
+
     prompt = build_prompt(mcq["question"], mcq["options"], contexts)
+
+    system_prompt = generation_cfg.get("system_prompt", "")
 
     response = generate_response(
         llm=llm,
         messages=[
-            {"role": "system", "content": "Reasoning: low"},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
         ],
         config=generation_cfg["generation_config"],
@@ -295,6 +359,10 @@ def main():
 
         collection = get_or_create_collection(chroma_client, exp["collection_name"])
 
+        reranker = None
+        if retrieval_cfg.get("use_reranker"):
+            reranker = load_reranker(retrieval_cfg["reranker_model"])
+
         start = time.time()
 
         for mcq in tqdm(dataset, desc=exp["experiment_name"]):
@@ -306,7 +374,10 @@ def main():
                     llm,
                     retrieval_cfg,
                     generation_cfg,
+                    reranker=reranker,
                 )
+            elif mode == "long_context":
+                pred, scores = run_long_context(mcq, llm, generation_cfg)
             else:
                 pred, scores = run_llm_only(mcq, llm, generation_cfg)
 
