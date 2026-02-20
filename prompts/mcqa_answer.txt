@@ -1,10 +1,10 @@
-Based only on the provided context (if any), answer the following question by choosing the correct option.
+Based only on the provided context (if any), answer the question.
 
-{context_str}
+{context_block}
 
 Question: {question}
 
 Options:
-{choices_text}
+{choices_block}
 
-Answer by providing ONLY the uppercase letter (A, B, C, or D) of the option you believe is correct. Do not add any explanation or additional text. Your answer should be just a letter.
+Answer ONLY with A, B, C, or D. Do not add any explanation or additional text. Your answer should be just a letter.
