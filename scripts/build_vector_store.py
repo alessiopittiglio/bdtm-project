@@ -32,6 +32,19 @@ def generate_chunk_id(relative_path: str, start_token: int, end_token: int) -> s
     return hashlib.sha1(base.encode("utf-8")).hexdigest()
 
 
+def extract_course_metadata(metadata: dict) -> dict:
+    """Extract only course-related metadata for chunk storage."""
+    course = metadata.get("course_details", {})
+
+    return {
+        "course": course.get("course"),
+        "module": course.get("module"),
+        "instructor": course.get("instructor"),
+        "lecture_date": course.get("lecture_date"),
+        "lecture_num": course.get("lecture_num"),
+    }
+
+
 def prepare_chunks(documents, embedding_model, chunk_size, chunk_overlap):
     texts = []
     metadatas = []
@@ -41,6 +54,8 @@ def prepare_chunks(documents, embedding_model, chunk_size, chunk_overlap):
         text = doc["text"]
         source_file = doc["source_file_txt"]
         relative_path = doc["relative_path"]
+
+        course_metadata = extract_course_metadata(doc["metadata"])
 
         chunks = chunk_text(
             text, embedding_model, chunk_size=chunk_size, overlap=chunk_overlap
@@ -61,6 +76,7 @@ def prepare_chunks(documents, embedding_model, chunk_size, chunk_overlap):
                     "end_token": chunk["end_token"],
                     "start_char": chunk["start_char"],
                     "end_char": chunk["end_char"],
+                    **course_metadata,
                 }
             )
             ids.append(chunk_id)
