@@ -1,0 +1,12 @@
+model_path: models/microsoft_Phi-4-mini-instruct-Q4_K_M.gguf
+
+model_config:
+  n_ctx: 32768
+  n_gpu_layers: 23
+  flash_attn: true
+  verbose: false
+
+generation_config:
+  temperature: 0
+  top_p: 1
+  max_tokens: 10

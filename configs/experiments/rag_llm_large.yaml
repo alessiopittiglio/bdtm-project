@@ -1,0 +1,18 @@
+experiment_name: rag_llm_large
+mode: rag
+collection_name: minilm_256_clean
+
+# ----------------
+# Modules
+# ----------------
+retrieval_config: configs/retrieval/minilm_256.yaml
+generation_config: configs/generation/llm_large.yaml
+
+# ----------------
+# Evaluation
+# ----------------
+metrics:
+  - accuracy
+  - recall@k
+  - mrr
+  - ndcg

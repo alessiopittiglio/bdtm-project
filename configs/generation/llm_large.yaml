@@ -1,0 +1,15 @@
+model_path: models/Qwen_Qwen3-32B-Q4_K_M.gguf
+
+model_config:
+  n_ctx: 8192
+  n_gpu_layers: 50
+  flash_attn: true
+  verbose: false
+
+generation_config:
+  temperature: 0
+  top_p: 1
+  max_tokens: 10
+
+system_prompt: |
+  /no_think

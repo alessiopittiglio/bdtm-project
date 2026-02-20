@@ -1,0 +1,18 @@
+experiment_name: rag_rerank
+mode: rag
+collection_name: mpnet_256_clean
+
+# ----------------
+# Modules
+# ----------------
+retrieval_config: configs/retrieval/mpnet_256_rerank.yaml
+generation_config: configs/generation/llm_small.yaml
+
+# ----------------
+# Evaluation
+# ----------------
+metrics:
+  - accuracy
+  - recall@k
+  - mrr
+  - ndcg

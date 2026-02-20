@@ -1,0 +1,19 @@
+experiment_name: rag_8_middle
+mode: rag
+collection_name: niah_8_middle
+dataset: dataset_8
+
+# ----------------
+# Modules
+# ----------------
+retrieval_config: configs/retrieval/mpnet_256_hybrid.yaml
+generation_config: configs/generation/llm_small.yaml
+
+# ----------------
+# Evaluation
+# ----------------
+metrics:
+  - accuracy
+  - recall@k
+  - mrr
+  - ndcg

@@ -1,0 +1,18 @@
+experiment_name: rag_bge_base
+mode: rag
+collection_name: bge_base_512_clean
+
+# ----------------
+# Modules
+# ----------------
+retrieval_config: configs/retrieval/bge_base_512.yaml
+generation_config: configs/generation/llm_small.yaml
+
+# ----------------
+# Evaluation
+# ----------------
+metrics:
+  - accuracy
+  - recall@k
+  - mrr
+  - ndcg
