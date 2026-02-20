@@ -1,29 +1,75 @@
-Your task is to create a high-quality multiple-choice question based ONLY on the following excerpt from a university lecture. The question should assess understanding of a specific concept or fact mentioned in the text.
+You are creating an evaluation dataset for a RAG system.
 
-TEXT EXCERPT:
+Below is a excerpt extracted from a university lecture of a Master's program in AI.
+
+Your task is to generate a multiple-choice question based ONLY on the provided excerpt.
+
+Requirements:
+- The question must require the excerpt to be answered correctly.
+- The question should be difficult to answer correctly without access to the excerpt, but easy if the excerpt is available.
+- There must be exactly one correct answer.
+- Distractors must be plausible but clearly incorrect according to the excerpt.
+- Avoid superficial or lexical questions (e.g., repetition, word counts, trivial details).
+- Avoid generic textbook questions that do not depend on the excerpt.
+- The correct answer MUST be supported by the excerpt.
+- Avoid opinion-based or interpretative questions.
+- Avoid meta-textual, introductory, biographical, administrative, or anecdotal content.
+- The evidence MUST be an exact copy from the excerpt. Do not modify, normalize, or shorten the sentence.
+- Focus primarily on core concepts, definitions, methods, properties, or applications in AI.
+
+Excerpt: 
 {context}
 
-Follow these instructions carefully:
-1. Question: Formulate a clear, concise, and unambiguous question that can be answered using only the information in the TEXT EXCERPT. Avoid questions that are too generic or require complex inferences not directly supported by the text. The question must focus on a significant aspect of the excerpt.
-2. Correct Answer: Identify the correct answer directly from the TEXT EXCERPT. The answer should be factual and verifiable within the text.
-3. Distractors (Distractor 1, Distractor 2, Distractor 3): Create three incorrect options. The distractors must:
-  - Be plausible and semantically related to the topic of the question or the context of the text.
-  - Be clearly incorrect according to the information found ONLY in the TEXT EXCERPT.
-  - Not be obviously absurd or irrelevant.
-  - Be distinct from one another and from the correct answer.
-4. Output Format: Return the result EXACTLY in the following JSON format. Do not add any introductory text, concluding remarks, or any other content outside of this JSON structure. Ensure the JSON is valid.
+Examples:
 
-JSON FORMAT:
-```json
+Example 1:
+
+Excerpt:
+"Regularization is used to prevent overfitting by penalizing model complexity. 
+For example, L2 regularization discourages large weights in the model."
+
+Output:
 {{
-  "question": "Your question here",
-  "correct_answer": "The correct answer here, exactly as derived from the text",
-  "distractors": [
-    "Distractor 1 here",
-    "Distractor 2 here",
-    "Distractor 3 here"
-  ]
+  "question": "What is the main goal of regularization in machine learning??",
+  "options": {{
+    "A": "Increase model complexity",
+    "B": "Reduce overfitting",
+    "C": "Improve interpretability only",
+    "D": "Increase training accuracy"
+  }},
+  "correct_answer": "B",
+  "evidence": "Regularization is used to prevent overfitting by penalizing model complexity."
 }}
-```
 
-Make sure each part (Question, Correct Answer, Distractors) is well-formulated and follows the constraints. Do not include any information or concepts not present in the TEXT EXCERPT.
+Example 2:
+
+Excerpt:
+"A decision tree is a supervised learning model that recursively partitions the feature space. 
+At each node, a splitting criterion such as Gini impurity or entropy is used to select the best feature."
+
+Output:
+{{
+  "question": "Which criterion is commonly used in decision trees to select the best split?",
+  "options": {{
+    "A": "Mean squared error",
+    "B": "Cosine similarity",
+    "C": "Gini impurity",
+    "D": "Euclidean distance"
+  }},
+  "correct_answer": "C",
+  "evidence": "At each node, a splitting criterion such as Gini impurity or entropy is used to select the best feature."
+}}
+
+Return strictly in the following JSON format:
+
+{{
+  "question": "...",
+  "options": {{
+    "A": "...",
+    "B": "...",
+    "C": "...",
+    "D": "..."
+  }},
+  "correct_answer": "letter corresponding to the correct option",
+  "evidence": "exact sentence from the chunk"
+}}
